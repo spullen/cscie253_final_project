@@ -7,4 +7,4 @@ The project was to design and implement a web based database application. I chos
 - Coldfusion
 - JQuery
 - Jquery Validate
-- Bootstrap
+- Twitter Bootstrap
