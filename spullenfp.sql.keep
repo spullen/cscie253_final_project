@@ -1,0 +1,1197 @@
+-- ******************************************************
+-- spullenfp.sql
+--
+-- Loader for Final Project DB
+--
+-- Description:	This script contains the DDL to load
+--              the tables of the INVENTORY database
+--
+-- There are 10 tables on this DB
+--
+-- Author:   Scott Pullen
+--
+-- Student:  Scott Pullen
+--
+-- Modified: December, 2012
+--
+-- ******************************************************
+
+-- ******************************************************
+--    SPOOL SESSION
+-- ******************************************************
+
+spool spullenfp.lst
+
+-- ******************************************************
+--    DROP TRIGGERS
+-- ******************************************************
+DROP TRIGGER TR_tbUsers_in;
+DROP TRIGGER TR_tbVenues_in;
+DROP TRIGGER TR_tbShows_in;
+DROP TRIGGER TR_tbShows_votingOverlap;
+DROP TRIGGER TR_tbBands_in;
+DROP TRIGGER TR_tbEntries_in;
+DROP TRIGGER TR_tbVotes_in;
+
+-- ******************************************************
+--    DROP PROCEDURES
+-- ******************************************************
+DROP PROCEDURE add_band_member;
+DROP PROCEDURE add_music_file;
+
+-- ******************************************************
+--    DROP TABLES
+-- Note:  Issue the appropiate commands to drop tables
+-- ******************************************************
+
+DROP TABLE tbVotes purge;
+DROP TABLE tbEntries purge;
+DROP TABLE tbMemberIds purge;
+DROP TABLE tbMembers purge;
+DROP TABLE tbMusicFileIds purge;
+DROP TABLE tbMusicFiles purge;
+DROP TABLE tbBands purge;
+DROP TABLE tbShows purge;
+DROP TABLE tbVenues purge;
+DROP TABLE tbUsers purge;
+
+-- ******************************************************
+--    DROP VIEWS
+-- ******************************************************
+DROP VIEW averageEntryRatingView;
+
+-- ******************************************************
+--    DROP SEQUENCES
+-- Note:  Issue the appropiate commands to drop sequences
+-- ******************************************************
+DROP SEQUENCE usersSeq;
+DROP SEQUENCE venuesSeq;
+DROP SEQUENCE showsSeq;
+DROP SEQUENCE bandsSeq;
+DROP SEQUENCE entriesSeq;
+DROP SEQUENCE votesSeq;
+
+-- ******************************************************
+--    CREATE TABLES
+-- ******************************************************
+CREATE TABLE tbUsers (
+        user_id         char(5) not null
+                        constraint rg_user_id check (user_id between '00001' and '99990')
+                        constraint pk_tbusers primary key,
+        username        varchar2(40) not null,
+        email           varchar2(40) not null,
+        pwd             varchar2(40) not null,
+        first_name      varchar2(40) not null,
+        last_name       varchar2(40) not null,
+        is_admin        char(1) default 0 not null
+                        constraint rg_is_admin check(is_admin in (0,1)),
+        constraint uniq_username unique (username),
+        constraint uniq_email unique (email)
+);
+
+CREATE TABLE tbVenues (
+        venue_id        char(2) not null
+                        constraint rg_venue_id check (venue_id between '01' and '90')
+                        constraint pk_tbvenues primary key,
+        name            varchar2(40) not null,
+        street          varchar2(40) not null,
+        city            varchar2(40) not null,
+        state           char(2) not null,
+        zip             varchar2(10) not null,
+        website         varchar2(40) null,
+        phone           varchar2(20) null
+);
+
+CREATE TABLE tbShows (
+        show_id         char(4) not null
+                        constraint rg_show_id check (show_id between '0001' and '9990')
+                        constraint pk_tbshows primary key,
+        venue_id        char(2) not null
+                        constraint fk_venue_id_tbvenues references tbVenues(venue_id),
+        created_at      date default sysdate not null,
+        voting_start_date date not null,
+        voting_end_date date not null,
+        show_date       date not null,
+        constraint rg_voting_dates check (voting_start_date < voting_end_date),
+        constraint rg_show_date check (voting_end_date < show_date)
+);
+
+CREATE TABLE tbBands (
+        band_id         char(4) not null
+                        constraint rg_band_id check (band_id between '0001' and '9990')
+                        constraint pk_tbbands primary key,
+        maintainer_id   char(5) not null
+                        constraint fk_maintainer_id_tbusers references tbUsers(user_id),
+        name            varchar2(40) not null,
+        biography       varchar2(1500) null,
+        website         varchar2(40) null
+);
+
+CREATE TABLE tbMembers (
+        band_id         char(4) not null
+                        constraint fk_band_id_member_band references tbBands(band_id) on delete cascade,
+        member_id       char(2) not null
+                        constraint rg_member_id check (member_id between '01' and '90'),
+        name            varchar2(40) not null,
+        instrument      varchar2(40) not null,
+        constraint pk_tbmembers primary key (band_id, member_id)
+);
+
+CREATE TABLE tbMemberIds (
+        member_id       char(2)
+);
+
+CREATE TABLE tbMusicFiles (
+        band_id         char(4) not null
+                        constraint fk_band_id_mf_band references tbBands(band_id) on delete cascade,
+        music_file_id   char(2) not null
+                        constraint rg_music_file_id check (music_file_id between '01' and '90'),
+        title           varchar2(40) not null,
+        file_path       varchar2(120) not null,
+        upload_date     date default sysdate not null,
+        constraint pk_tbmusicfiles primary key (band_id, music_file_id)
+);
+
+CREATE TABLE tbMusicFileIds (
+        music_file_id   char(2)
+);
+
+CREATE TABLE tbEntries (
+        entry_id        char(8) not null
+                        constraint rg_entry_id check (entry_id between '00000001' and '99999990')
+                        constraint pk_tbentries primary key,
+        band_id         char(4) not null
+                        constraint fk_band_id_tbbands references tbBands(band_id) on delete cascade,
+        show_id         char(4) not null
+                        constraint fk_show_id_tbshows references tbShows(show_id) on delete cascade,
+        entry_date      date default sysdate not null
+);
+
+CREATE TABLE tbVotes (
+        vote_id         char(8) not null
+                        constraint rg_vote_id check (vote_id between '00000001' and '99999990')
+                        constraint pk_tbvotes primary key,
+        entry_id        char(8) null
+                        constraint fk_entry_id_tbentries references tbEntries(entry_id) on delete cascade,
+        user_id         char(5) null
+                        constraint fk_user_id_tbusers references tbUsers(user_id) on delete set null,
+        rating          number(1) not null
+                        constraint rg_rating check (rating between 1 and 5),
+        date_voted      date default sysdate not null,
+        constraint uniq_vote unique (entry_id, user_id)
+);
+
+-- ******************************************************
+--    CREATE SEQUENCES
+-- ******************************************************
+
+CREATE SEQUENCE usersSeq
+  increment by 1
+  start with 1;
+
+CREATE SEQUENCE venuesSeq
+  increment by 1
+  start with 1;  
+
+CREATE SEQUENCE showsSeq
+  increment by 1
+  start with 1;
+
+CREATE SEQUENCE bandsSeq
+  increment by 1
+  start with 1;
+
+CREATE SEQUENCE entriesSeq
+  increment by 1
+  start with 1;
+
+CREATE SEQUENCE votesSeq
+  increment by 1
+  start with 1;
+
+-- ******************************************************
+--    POPULATE THE member and music file ids
+-- ******************************************************
+BEGIN
+  for x IN 1..90 loop
+    INSERT INTO tbMemberIds VALUES(x);
+    INSERT INTO tbMusicFileIds VALUES(x);
+  end loop;
+  commit;
+END;
+/
+
+-- ******************************************************
+--    CREATE VIEWS
+-- ******************************************************
+CREATE VIEW averageEntryRatingView
+AS 
+  SELECT entry_id, avg(rating) as average_rating
+  FROM tbVotes
+  GROUP BY entry_id;
+
+-- ******************************************************
+--    VIEW TABLES
+--
+-- Note:  Issue the appropiate commands to show your data
+-- ******************************************************
+
+SELECT * FROM tbUsers;
+SELECT * FROM tbVenues;
+SELECT * FROM tbShows;
+SELECT * FROM tbBands;
+SELECT * FROM tbMembers;
+SELECT * FROM tbMemberIds;
+SELECT * FROM tbMusicFiles;
+SELECT * FROM tbMusicFileIds;
+SELECT * FROM tbEntries;
+SELECT * FROM tbVotes;
+
+-- ******************************************************
+--    QUALITY CONTROLS
+--
+-- Note:  Test the following constraints:
+--        *) Entity integrity
+--        *) Referential integrity
+--        *) Column constraints
+-- ******************************************************
+
+-- ******************************************************
+--    tbUsers Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(99, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+-- Setup End
+
+-- NULL PK
+INSERT INTO tbUsers(user_id, username)
+VALUES (NULL, 'test1');
+
+-- DUP PK
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(99, 'test1', 'tes1t@test.com', '3ncryp73d', 'First', 'Last');
+
+-- user_id Range Min
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(0, 'test2', 'test2@test.com', '3ncryp73d', 'First', 'Last');
+
+-- user_id Range Max
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(99999, 'test3', 'test3@test.com', '3ncryp73d', 'First', 'Last');
+
+-- unique username
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(100, 'test', 'test4@test.com', '3ncryp73d', 'First', 'Last');
+
+-- unique email
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(101, 'test4', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+SELECT * FROM tbUsers;
+
+-- Cleanup Start
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    tbVenues Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(50, 'Test', '123 Fake St', 'Boston', 'MA', '02155');
+-- Setup End
+
+-- NULL PK
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(NULL, 'Test1', '123 Fake St', 'Boston', 'MA', '02155');
+
+-- DUP PK
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(50, 'Test2', '123 Fake St', 'Boston', 'MA', '02155');
+
+-- venue_id Range Min
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(0, 'Test', '123 Fake St', 'Boston', 'MA', '02155');
+
+-- venue_id Range Max
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(99, 'Test', '123 Fake St', 'Boston', 'MA', '02155');
+
+-- Cleanup Start
+DELETE FROM tbVenues;
+-- Cleanup End
+
+-- ******************************************************
+--    tbShows Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(50, 'Test', '123 Fake St', 'Boston', 'MA', '02155');
+
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(90, 50, sysdate, sysdate + 10, sysdate + 20);
+-- Setup End
+
+-- NULL PK
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(NULL, 50, sysdate, sysdate + 10, sysdate + 20);
+
+-- DUP PK
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(90, 50, sysdate, sysdate + 10, sysdate + 20);
+
+-- show_id Range Min
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(0, 50, sysdate, sysdate + 10, sysdate + 20);
+
+-- show_id Range Max
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(9999, 50, sysdate, sysdate + 10, sysdate + 20);
+
+-- Non-Existent FK
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(90, 1, sysdate, sysdate + 10, sysdate + 20);
+
+-- Restrict Delete
+DELETE FROM tbVenues WHERE venue_id = 50;
+
+
+-- Attempt to insert record where voting start date > voting end date
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(51, 50, sysdate + 30, sysdate + 20, sysdate + 60);
+
+-- Attempt to insert record where voting end date > show date
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(51, 50, sysdate + 30, sysdate + 70, sysdate + 60);
+
+-- Attempt to update record where voting start date > voting end date
+UPDATE tbShows
+SET voting_start_date = (sysdate + 30),
+    voting_end_date = (sysdate + 20),
+    show_date = (sysdate + 60)
+WHERE show_id = 90;
+
+-- Attempt to update record where voting end date > show date
+UPDATE tbShows
+SET voting_start_date = (sysdate + 30),
+    voting_end_date = (sysdate + 70),
+    show_date = (sysdate + 60)
+WHERE show_id = 90;
+
+-- Cleanup Start
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+-- Cleanup End
+
+-- ******************************************************
+--    tbBands Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band');
+-- Setup End
+
+-- DUP PK
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band1');
+
+-- NULL PK
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(NULL, 70, 'Band2');
+
+-- band_id Range min
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(0, 70, 'Band3');
+
+-- band_id Range max
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(9999, 70, 'Band4');
+
+-- Non Existent FK
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(81, 71, 'Band5');
+
+-- Delete restriction
+DELETE FROM tbUsers WHERE user_id = 70;
+
+-- Cleanup Start
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    tbMembers Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band');
+
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(80, 1, 'First Last', 'Guitar');
+-- Setup End
+
+-- DUP PK
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(80, 1, 'First Last1', 'Guitar');
+
+-- NULL PK
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(NULL, 2, 'First Last2', 'Guitar');
+
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(80, NULL, 'First Last3', 'Guitar');
+
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(NULL, NULL, 'First Last4', 'Guitar');
+
+-- member_id range min
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(80, 0, 'First Last5', 'Guitar');
+
+-- member_id range max
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(80, 99, 'First Last6', 'Guitar');
+
+-- Non-Existent FK
+INSERT INTO tbMembers(band_id, member_id, name, instrument)
+VALUES(81, 1, 'First Last7', 'Guitar');
+
+-- Cascade Delete
+SELECT * FROM tbMembers;
+
+DELETE FROM tbBands WHERE band_id = 80;
+
+SELECT * FROM tbMembers;
+
+-- Cleanup Start
+DELETE FROM tbMembers;
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    tbMusicFiles Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band');
+
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(80, 1, 'Title', '/path/to/file.mp3', sysdate);
+-- Setup End
+
+-- DUP PK
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(80, 1, 'Title1', '/path/to/file.mp3', sysdate);
+
+-- NULL PK
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(NULL, 1, 'Title2', '/path/to/file.mp3', sysdate);
+
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(80, NULL, 'Title3', '/path/to/file.mp3', sysdate);
+
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(NULL, NULL, 'Title4', '/path/to/file.mp3', sysdate);
+
+-- music_file_id range min
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(80, 0, 'Title5', '/path/to/file.mp3', sysdate);
+
+-- music_file_id range max
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(80, 99, 'Title6', '/path/to/file.mp3', sysdate);
+
+-- Non-Existent FK
+INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path, upload_date)
+VALUES(81, 1, 'Title7', '/path/to/file.mp3', sysdate);
+
+-- Cascade Delete
+SELECT * FROM tbMusicFiles;
+
+DELETE FROM tbBands WHERE band_id = 80;
+
+SELECT * FROM tbMusicFiles;
+
+-- Cleanup Start
+DELETE FROM tbMusicFiles;
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    tbEntries Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(50, 'Test', '123 Fake St', 'Boston', 'MA', '02155');
+
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(90, 50, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test1', 'test1@test.com', '3ncryp73d', 'First1', 'Last1');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band1');
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(71, 'test2', 'test2@test.com', '3ncryp73d', 'First2', 'Last2');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(81, 71, 'Band2');
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(72, 'test3', 'test3@test.com', '3ncryp73d', 'First3', 'Last3');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(82, 72, 'Band3');
+
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(50, 80, 90);
+
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(51, 81, 90);
+-- Setup End
+
+-- Dup PK
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(50, 80, 90);
+
+-- NULL PK
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(NULL, 80, 90);
+
+-- Non-Existent FK
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(52, 83, 90);
+
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(53, 80, 91);
+
+-- entry_id Range min
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(0, 82, 90);
+
+-- entry_id Range max
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(99999999, 82, 90);
+
+-- delete cascade of band
+SELECT count(*) FROM tbEntries;
+
+DELETE FROM tbBands WHERE band_id = 80;
+
+SELECT count(*) FROM tbEntries;
+
+-- delete cascade of show
+SELECT count(*) FROM tbEntries;
+
+DELETE FROM tbShows WHERE show_id = 90;
+
+SELECT count(*) FROM tbEntries;
+
+-- Cleanup Start
+DELETE FROM tbEntries;
+DELETE FROM tbBands;
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    tbVotes Tests
+-- ******************************************************
+
+-- Setup Start
+INSERT INTO tbVenues(venue_id, name, street, city, state, zip)
+VALUES(50, 'Test', '123 Fake St', 'Boston', 'MA', '02155');
+
+INSERT INTO tbShows(show_id, venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(90, 50, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test1', 'test1@test.com', '3ncryp73d', 'First1', 'Last1');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band1');
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(71, 'test2', 'test2@test.com', '3ncryp73d', 'First2', 'Last2');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(81, 71, 'Band2');
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(72, 'test3', 'test3@test.com', '3ncryp73d', 'First3', 'Last3');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(82, 72, 'Band3');
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(73, 'test4', 'test4@test.com', '3ncryp73d', 'First4', 'Last4');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(83, 73, 'Band4');
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(74, 'test5', 'test5@test.com', '3ncryp73d', 'First5', 'Last5');
+
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(75, 'test6', 'test6@test.com', '3ncryp73d', 'First6', 'Last6');
+
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(50, 80, 90);
+
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(51, 81, 90);
+
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(52, 82, 90);
+
+INSERT INTO tbEntries(entry_id, band_id, show_id)
+VALUES(53, 83, 90);
+
+
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(1, 50, 74, 1);
+
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(2, 51, 74, 2);
+
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(3, 52, 74, 3);
+
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(4, 53, 75, 4);
+-- Setup End
+
+-- Dup PK
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(1, 50, 75, 2);
+
+-- NULL PK
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(NULL, 50, 75, 1);
+
+-- Non-Existent FKs
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(5, 80, 74, 1);
+
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(6, 50, 80, 3);
+
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(7, 54, 75, 3);
+
+-- rating range low
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(8, 50, 75, 0)
+
+-- rating range high
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(9, 50, 75, 6);
+
+-- unique votes
+INSERT INTO tbVotes(vote_id, entry_id, user_id, rating)
+VALUES(10, 50, 74, 1);
+
+-- set null when delete user
+SELECT vote_id, entry_id, user_id FROM tbVotes;
+
+DELETE FROM tbUsers WHERE user_id = 75;
+
+SELECT vote_id, entry_id, user_id FROM tbVotes;
+
+-- Cascade delete when delete entry
+SELECT count(*) FROM tbVotes;
+
+DELETE FROM tbEntries WHERE entry_id = 53;
+
+SELECT count(*) FROM tbVotes;
+
+-- Cascade delete when delete band
+SELECT count(*) FROM tbVotes;
+
+DELETE FROM tbBands WHERE band_id = 80;
+
+SELECT count(*) FROM tbVotes;
+
+-- cascade delete when delete show
+SELECT count(*) FROM tbVotes;
+
+DELETE FROM tbShows WHERE show_id = 90;
+
+SELECT count(*) FROM tbVotes;
+
+-- Cleanup Start
+DELETE FROM tbVotes;
+DELETE FROM tbEntries;
+DELETE FROM tbBands;
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    CREATE STORED PROCEDURES
+-- ******************************************************
+
+-- add_band_member
+-- Retrieves the member_id and inserts a new tbMembers record
+CREATE OR REPLACE PROCEDURE add_band_member
+  ( 
+    bandId      in  tbMembers.band_id%type,
+    name        in  tbMembers.name%type,
+    instrument  in  tbMembers.instrument%type,
+    memberId    out tbMemberIds.member_id%type
+  )
+IS
+  bandMemberId char(2) default null;
+BEGIN
+
+  /* Get the band member id */
+  SELECT member_id into bandMemberId
+  FROM (
+    SELECT member_id, rownum r
+    FROM tbMemberIds a
+    WHERE NOT EXISTS (
+      SELECT * 
+      FROM tbMembers b
+      WHERE a.member_id = b.member_id AND
+            b.band_id = bandId ) AND
+          rownum <= 1
+  )
+  WHERE r > 0;
+
+  IF bandMemberId IS NOT NULL THEN
+    /* Insert the new band member record */
+    memberId := bandMemberId;
+
+    INSERT INTO tbMembers(band_id, member_id, name, instrument)
+    VALUES
+      (
+        bandId,
+        memberId,
+        name,
+        instrument
+      );
+  ELSE
+    /* If a band has the reached the max number of members return -1 */
+    memberId := -1;
+  END IF;
+
+END add_band_member;
+/
+
+-- add_music_file
+-- Retrieves the music_file_id and inserts a new tbMusicFiles record
+CREATE OR REPLACE PROCEDURE add_music_file
+  ( 
+    bandId        in  tbMusicFiles.band_id%type,
+    title         in  tbMusicFiles.title%type,
+    filePath      in  tbMusicFiles.file_path%type,
+    musicFileId   out tbMusicFileIds.music_file_id%type
+  )
+IS
+  bandMusicFileId char(2) default null;
+BEGIN
+
+  /* Get the band member id */
+  SELECT music_file_id into bandMusicFileId
+  FROM (
+    SELECT music_file_id, rownum r
+    FROM tbMusicFileIds a
+    WHERE NOT EXISTS (
+      SELECT * 
+      FROM tbMusicFiles b
+      WHERE a.music_file_id = b.music_file_id AND
+            b.band_id = bandId ) AND
+            rownum <= 1
+  )
+  WHERE r > 0;
+
+  IF bandMusicFileId IS NOT NULL THEN
+    /* Insert the new music file record */
+    musicFileId := bandMusicFileId;
+
+    INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path)
+    VALUES
+      (
+        bandId,
+        musicFileId,
+        title,
+        filePath
+      );
+  ELSE
+    /* If a band has the reached the max number of files return -1 */
+    musicFileId := -1;
+  END IF;
+
+END add_music_file;
+/
+
+-- ******************************************************
+--    TEST STORED PROCS
+-- ******************************************************
+
+-- ******************************************************
+--    Testing add_band_member
+-- ******************************************************
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band');
+-- Setup End
+
+SELECT * FROM tbMembers;
+
+DECLARE
+  member_id char(2);
+BEGIN
+  add_band_member(80, 'First Last', 'Guitar', member_id);
+END;
+/
+
+SELECT * FROM tbMembers;
+
+-- Cleanup Start
+DELETE FROM tbMembers;
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    Testing add_music_file
+-- ******************************************************
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band');
+-- Setup End
+
+SELECT * FROM tbMusicFiles;
+
+DECLARE
+  music_file_id char(2);
+BEGIN
+  add_music_file(80, 'Test Title', '/path/to/file.mp3', music_file_id);
+END;
+/
+
+SELECT * FROM tbMusicFiles;
+
+-- Cleanup Start
+DELETE FROM tbMusicFiles;
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    CREATE TRIGGERS
+-- ******************************************************
+
+-- Auto Increment user_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbUsers_in
+  before insert on tbUsers
+  for each row
+
+  begin
+    SELECT usersSeq.nextval 
+    INTO :new.user_id
+    FROM dual;
+
+  end TR_tbUsers_in;
+/
+
+-- Auto Increment venue_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbVenues_in
+  before insert on tbVenues
+  for each row
+
+  begin
+    SELECT venuesSeq.nextval
+    INTO :new.venue_id
+    FROM dual;    
+
+  end TR_tbVenues_in;
+/
+
+-- Auto Increment show_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbShows_in
+  before insert 
+  on tbShows
+  for each row
+  
+  begin
+    SELECT showsSeq.nextval
+    INTO :new.show_id
+    FROM dual;
+
+  end TR_tbShows_in;
+/
+
+CREATE OR REPLACE TRIGGER TR_tbShows_votingOverlap
+  before insert on tbShows
+  for each row
+
+  DECLARE
+    overlapCount NUMBER;
+  BEGIN
+
+    SELECT count(*) into overlapCount
+    FROM tbShows
+    WHERE (voting_start_date <= :new.voting_start_date AND voting_end_date >= :new.voting_start_date) OR
+          (voting_start_date <= :new.voting_end_date   AND voting_end_date >= :new.voting_end_date);
+  
+    IF overlapCount > 0 THEN
+      raise_application_error(-20001, 'tbShows INSERT EXCEPTION: The show being inserted overlaps with an existing show');
+    END IF;
+
+  END TR_tbShows_votingOverlap;
+/
+
+-- Auto Increment band_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbBands_in
+  before insert on tbBands
+  for each row
+
+  begin
+    SELECT bandsSeq.nextval
+    INTO :new.band_id
+    FROM dual;    
+
+  end TR_tbBands_in;
+/
+
+-- Auto Increment entry_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbEntries_in
+  before insert on tbEntries
+  for each row
+
+  begin
+    SELECT entriesSeq.nextval
+    INTO :new.entry_id
+    FROM dual;    
+
+  end TR_tbEntries_in;
+/
+
+-- Auto Increment vote_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbVotes_in
+  before insert on tbVotes
+  for each row
+
+  begin
+    SELECT votesSeq.nextval
+    INTO :new.vote_id
+    FROM dual;
+
+  end TR_tbVotes_in;
+/
+
+-- ******************************************************
+--   TR_tbUsers_in test
+-- ******************************************************
+SELECT * FROM tbUsers;
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name) 
+VALUES('testuname1', 'test1@test.com', '3nCryp73d', 'FirstName1', 'LastName1');
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name) 
+VALUES('testuname2', 'test2@test.com', '3nCryp73d', 'FirstName2', 'LastName2');
+
+SELECT user_id, username FROM tbUsers;
+
+DELETE FROM tbUsers;
+
+-- ******************************************************
+--   TR_tbVenues_in test
+-- ******************************************************
+SELECT * FROM tbVenues;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test1', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test2', '124 Fake St', 'Boston', 'MA', '02116');
+
+SELECT venue_id, name FROM tbVenues;
+
+DELETE FROM tbVenues;
+
+-- ******************************************************
+--   TR_tbShows_in test
+-- ******************************************************
+SELECT * FROM tbShows;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test1', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate + 25, sysdate + 50, sysdate + 75);
+
+SELECT show_id, venue_id FROM tbShows;
+
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+
+-- ******************************************************
+--   TR_tbShows_votingOverlap tests
+-- ******************************************************
+
+SELECT * FROM tbShows;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test1', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, to_date('10/01/2012', 'mm/dd/yyyy'), to_date('12/01/2012', 'mm/dd/yyyy'), to_date('12/20/2012', 'mm/dd/yyyy'));
+
+SELECT * FROM tbShows;
+
+-- On insert
+-- Attempt to insert show where the voting start date is between an existing shows start and end date
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, to_date('10/20/2012', 'mm/dd/yyyy'), to_date('02/01/2013', 'mm/dd/yyyy'), to_date('03/01/2013', 'mm/dd/yyyy'));
+
+-- Attempt to insert show where the voting end date is between an existing shows start and end date
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, to_date('09/01/2012', 'mm/dd/yyyy'), to_date('10/10/2012', 'mm/dd/yyyy'), to_date('03/01/2013', 'mm/dd/yyyy'));
+
+SELECT * FROM tbShows;
+
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+
+-- ******************************************************
+--   TR_tbBands_in test
+-- ******************************************************
+SELECT * FROM tbBands;
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname', 'test@test.com', '3nCryp73d', 'FirstName', 'LastName');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name1');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name2');
+
+SELECT band_id, maintainer_id, name FROM tbBands;
+
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+
+-- ******************************************************
+--   TR_tbEntries_in test
+-- ******************************************************
+SELECT * FROM tbEntries;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname1', 'test1@test.com', '3nCryp73d', 'FirstName1', 'LastName1');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name1');
+
+INSERT INTO tbEntries(band_id, show_id)
+VALUES(bandsSeq.currval, showsSeq.currval);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname2', 'test2@test.com', '3nCryp73d', 'FirstName2', 'LastName2');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name2');
+
+INSERT INTO tbEntries(band_id, show_id)
+VALUES(bandsSeq.currval, showsSeq.currval);
+
+SELECT entry_id, band_id FROM tbEntries;
+
+DELETE FROM tbEntries;
+DELETE FROM tbBands;
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+DELETE FROM tbUsers;
+
+-- ******************************************************
+--   TR_tbVotes_in test
+-- ******************************************************
+SELECT * FROM tbVotes;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname1', 'test1@test.com', '3nCryp73d', 'FirstName1', 'LastName1');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name1');
+
+INSERT INTO tbEntries(band_id, show_id)
+VALUES(bandsSeq.currval, showsSeq.currval);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname2', 'test2@test.com', '3nCryp73d', 'FirstName2', 'LastName2');
+
+INSERT INTO tbVotes(entry_id, user_id, rating)
+VALUES(entriesSeq.currval, usersSeq.currVal, 4);
+
+SELECT * FROM tbVotes;
+
+DELETE FROM tbVotes;
+DELETE FROM tbEntries;
+DELETE FROM tbBands;
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+DELETE FROM tbUsers;
+
+-- ******************************************************
+--   Setting up test user accounts
+-- ******************************************************
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('user', 'user@test.com', '253user', 'Joe', 'User');
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name, is_admin)
+VALUES('admin', 'admin@test.com', '253admin', 'Joe', 'Admin', 1);
+
+SELECT user_id, username FROM tbUsers;
+
+-- ******************************************************
+--    END SESSION
+-- ******************************************************
+
+spool off

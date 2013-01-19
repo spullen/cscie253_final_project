@@ -1,0 +1,270 @@
+-- ******************************************************
+--    CREATE TRIGGERS
+-- ******************************************************
+
+-- Auto Increment user_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbUsers_in
+  before insert on tbUsers
+  for each row
+
+  begin
+    SELECT usersSeq.nextval 
+    INTO :new.user_id
+    FROM dual;
+
+  end TR_tbUsers_in;
+/
+
+-- Auto Increment venue_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbVenues_in
+  before insert on tbVenues
+  for each row
+
+  begin
+    SELECT venuesSeq.nextval
+    INTO :new.venue_id
+    FROM dual;    
+
+  end TR_tbVenues_in;
+/
+
+-- Auto Increment show_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbShows_in
+  before insert 
+  on tbShows
+  for each row
+  
+  begin
+    SELECT showsSeq.nextval
+    INTO :new.show_id
+    FROM dual;
+
+  end TR_tbShows_in;
+/
+
+CREATE OR REPLACE TRIGGER TR_tbShows_votingOverlap
+  before insert on tbShows
+  for each row
+
+  DECLARE
+    overlapCount NUMBER;
+  BEGIN
+
+    SELECT count(*) into overlapCount
+    FROM tbShows
+    WHERE (voting_start_date <= :new.voting_start_date AND voting_end_date >= :new.voting_start_date) OR
+          (voting_start_date <= :new.voting_end_date   AND voting_end_date >= :new.voting_end_date);
+  
+    IF overlapCount > 0 THEN
+      raise_application_error(-20001, 'tbShows INSERT EXCEPTION: The show being inserted overlaps with an existing show');
+    END IF;
+
+  END TR_tbShows_votingOverlap;
+/
+
+-- Auto Increment band_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbBands_in
+  before insert on tbBands
+  for each row
+
+  begin
+    SELECT bandsSeq.nextval
+    INTO :new.band_id
+    FROM dual;    
+
+  end TR_tbBands_in;
+/
+
+-- Auto Increment entry_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbEntries_in
+  before insert on tbEntries
+  for each row
+
+  begin
+    SELECT entriesSeq.nextval
+    INTO :new.entry_id
+    FROM dual;    
+
+  end TR_tbEntries_in;
+/
+
+-- Auto Increment vote_id on INSERT
+CREATE OR REPLACE TRIGGER TR_tbVotes_in
+  before insert on tbVotes
+  for each row
+
+  begin
+    SELECT votesSeq.nextval
+    INTO :new.vote_id
+    FROM dual;
+
+  end TR_tbVotes_in;
+/
+
+-- ******************************************************
+--   TR_tbUsers_in test
+-- ******************************************************
+SELECT * FROM tbUsers;
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name) 
+VALUES('testuname1', 'test1@test.com', '3nCryp73d', 'FirstName1', 'LastName1');
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name) 
+VALUES('testuname2', 'test2@test.com', '3nCryp73d', 'FirstName2', 'LastName2');
+
+SELECT user_id, username FROM tbUsers;
+
+DELETE FROM tbUsers;
+
+-- ******************************************************
+--   TR_tbVenues_in test
+-- ******************************************************
+SELECT * FROM tbVenues;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test1', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test2', '124 Fake St', 'Boston', 'MA', '02116');
+
+SELECT venue_id, name FROM tbVenues;
+
+DELETE FROM tbVenues;
+
+-- ******************************************************
+--   TR_tbShows_in test
+-- ******************************************************
+SELECT * FROM tbShows;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test1', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate + 25, sysdate + 50, sysdate + 75);
+
+SELECT show_id, venue_id FROM tbShows;
+
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+
+-- ******************************************************
+--   TR_tbShows_votingOverlap tests
+-- ******************************************************
+
+SELECT * FROM tbShows;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test1', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, to_date('10/01/2012', 'mm/dd/yyyy'), to_date('12/01/2012', 'mm/dd/yyyy'), to_date('12/20/2012', 'mm/dd/yyyy'));
+
+SELECT * FROM tbShows;
+
+-- On insert
+-- Attempt to insert show where the voting start date is between an existing shows start and end date
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, to_date('10/20/2012', 'mm/dd/yyyy'), to_date('02/01/2013', 'mm/dd/yyyy'), to_date('03/01/2013', 'mm/dd/yyyy'));
+
+-- Attempt to insert show where the voting end date is between an existing shows start and end date
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, to_date('09/01/2012', 'mm/dd/yyyy'), to_date('10/10/2012', 'mm/dd/yyyy'), to_date('03/01/2013', 'mm/dd/yyyy'));
+
+SELECT * FROM tbShows;
+
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+
+-- ******************************************************
+--   TR_tbBands_in test
+-- ******************************************************
+SELECT * FROM tbBands;
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname', 'test@test.com', '3nCryp73d', 'FirstName', 'LastName');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name1');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name2');
+
+SELECT band_id, maintainer_id, name FROM tbBands;
+
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+
+-- ******************************************************
+--   TR_tbEntries_in test
+-- ******************************************************
+SELECT * FROM tbEntries;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname1', 'test1@test.com', '3nCryp73d', 'FirstName1', 'LastName1');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name1');
+
+INSERT INTO tbEntries(band_id, show_id)
+VALUES(bandsSeq.currval, showsSeq.currval);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname2', 'test2@test.com', '3nCryp73d', 'FirstName2', 'LastName2');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name2');
+
+INSERT INTO tbEntries(band_id, show_id)
+VALUES(bandsSeq.currval, showsSeq.currval);
+
+SELECT entry_id, band_id FROM tbEntries;
+
+DELETE FROM tbEntries;
+DELETE FROM tbBands;
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+DELETE FROM tbUsers;
+
+-- ******************************************************
+--   TR_tbVotes_in test
+-- ******************************************************
+SELECT * FROM tbVotes;
+
+INSERT INTO tbVenues(name, street, city, state, zip)
+VALUES('Test', '123 Fake St', 'Boston', 'MA', '02115');
+
+INSERT INTO tbShows(venue_id, voting_start_date, voting_end_date, show_date)
+VALUES(venuesSeq.currval, sysdate, sysdate + 10, sysdate + 20);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname1', 'test1@test.com', '3nCryp73d', 'FirstName1', 'LastName1');
+
+INSERT INTO tbBands(maintainer_id, name)
+VALUES(usersSeq.currval, 'Test Band Name1');
+
+INSERT INTO tbEntries(band_id, show_id)
+VALUES(bandsSeq.currval, showsSeq.currval);
+
+INSERT INTO tbUsers(username, email, pwd, first_name, last_name)
+VALUES('testuname2', 'test2@test.com', '3nCryp73d', 'FirstName2', 'LastName2');
+
+INSERT INTO tbVotes(entry_id, user_id, rating)
+VALUES(entriesSeq.currval, usersSeq.currVal, 4);
+
+SELECT * FROM tbVotes;
+
+DELETE FROM tbVotes;
+DELETE FROM tbEntries;
+DELETE FROM tbBands;
+DELETE FROM tbShows;
+DELETE FROM tbVenues;
+DELETE FROM tbUsers;

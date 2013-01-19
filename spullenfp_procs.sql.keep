@@ -1,0 +1,157 @@
+-- ******************************************************
+--    CREATE STORED PROCEDURES
+-- ******************************************************
+
+-- add_band_member
+-- Retrieves the member_id and inserts a new tbMembers record
+CREATE OR REPLACE PROCEDURE add_band_member
+  ( 
+    bandId      in  tbMembers.band_id%type,
+    name        in  tbMembers.name%type,
+    instrument  in  tbMembers.instrument%type,
+    memberId    out tbMemberIds.member_id%type
+  )
+IS
+  bandMemberId char(2) default null;
+BEGIN
+
+  /* Get the band member id */
+  SELECT member_id into bandMemberId
+  FROM (
+    SELECT member_id, rownum r
+    FROM tbMemberIds a
+    WHERE NOT EXISTS (
+      SELECT * 
+      FROM tbMembers b
+      WHERE a.member_id = b.member_id AND
+            b.band_id = bandId ) AND
+          rownum <= 1
+  )
+  WHERE r > 0;
+
+  IF bandMemberId IS NOT NULL THEN
+    /* Insert the new band member record */
+    memberId := bandMemberId;
+
+    INSERT INTO tbMembers(band_id, member_id, name, instrument)
+    VALUES
+      (
+        bandId,
+        memberId,
+        name,
+        instrument
+      );
+  ELSE
+    /* If a band has the reached the max number of members return -1 */
+    memberId := -1;
+  END IF;
+
+END add_band_member;
+/
+
+-- add_music_file
+-- Retrieves the music_file_id and inserts a new tbMusicFiles record
+CREATE OR REPLACE PROCEDURE add_music_file
+  ( 
+    bandId        in  tbMusicFiles.band_id%type,
+    title         in  tbMusicFiles.title%type,
+    filePath      in  tbMusicFiles.file_path%type,
+    musicFileId   out tbMusicFileIds.music_file_id%type
+  )
+IS
+  bandMusicFileId char(2) default null;
+BEGIN
+
+  /* Get the band member id */
+  SELECT music_file_id into bandMusicFileId
+  FROM (
+    SELECT music_file_id, rownum r
+    FROM tbMusicFileIds a
+    WHERE NOT EXISTS (
+      SELECT * 
+      FROM tbMusicFiles b
+      WHERE a.music_file_id = b.music_file_id AND
+            b.band_id = bandId ) AND
+            rownum <= 1
+  )
+  WHERE r > 0;
+
+  IF bandMusicFileId IS NOT NULL THEN
+    /* Insert the new music file record */
+    musicFileId := bandMusicFileId;
+
+    INSERT INTO tbMusicFiles(band_id, music_file_id, title, file_path)
+    VALUES
+      (
+        bandId,
+        musicFileId,
+        title,
+        filePath
+      );
+  ELSE
+    /* If a band has the reached the max number of files return -1 */
+    musicFileId := -1;
+  END IF;
+
+END add_music_file;
+/
+
+-- ******************************************************
+--    TEST STORED PROCS
+-- ******************************************************
+
+-- ******************************************************
+--    Testing add_band_member
+-- ******************************************************
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band');
+-- Setup End
+
+SELECT * FROM tbMembers;
+
+DECLARE
+  member_id char(2);
+BEGIN
+  add_band_member(80, 'First Last', 'Guitar', member_id);
+END;
+/
+
+SELECT * FROM tbMembers;
+
+-- Cleanup Start
+DELETE FROM tbMembers;
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+-- Cleanup End
+
+-- ******************************************************
+--    Testing add_music_file
+-- ******************************************************
+-- Setup Start
+INSERT INTO tbUsers(user_id, username, email, pwd, first_name, last_name)
+VALUES(70, 'test', 'test@test.com', '3ncryp73d', 'First', 'Last');
+
+INSERT INTO tbBands(band_id, maintainer_id, name)
+VALUES(80, 70, 'Band');
+-- Setup End
+
+SELECT * FROM tbMusicFiles;
+
+DECLARE
+  music_file_id char(2);
+BEGIN
+  add_music_file(80, 'Test Title', '/path/to/file.mp3', music_file_id);
+END;
+/
+
+SELECT * FROM tbMusicFiles;
+
+-- Cleanup Start
+DELETE FROM tbMusicFiles;
+DELETE FROM tbBands;
+DELETE FROM tbUsers;
+-- Cleanup End
